@@ -2,6 +2,9 @@
 name = "typestorm"
 version = "0.1.0"
 edition = "2021"
+description = "A cool terminal typing test CLI written in rust"
+license = "MIT"
+repository = "https://github.com/arnabnandikgp/typestorm"
 
 [dependencies]
 ratatui = "0.29.0"
