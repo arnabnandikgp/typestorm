@@ -42,6 +42,10 @@ pub struct App {
     // Stats
     pub total_correct_strokes: usize,
     pub total_incorrect_strokes: usize,
+    // Analytics
+    pub wpm_history: Vec<(f64, f64)>, // (time, wpm)
+    pub error_points: Vec<(f64, f64)>, // (time, wpm_at_error)
+    pub last_wpm_sample: Option<Instant>,
 }
 
 impl Default for App {
@@ -59,6 +63,9 @@ impl Default for App {
             include_numbers: false,
             total_correct_strokes: 0,
             total_incorrect_strokes: 0,
+            wpm_history: Vec::new(),
+            error_points: Vec::new(),
+            last_wpm_sample: None,
         }
     }
 }
@@ -70,10 +77,31 @@ impl App {
 
     pub fn tick(&mut self) {
         if self.mode == AppMode::Typing {
+            // Sample WPM every 1 second
+            if let Some(start) = self.start_time {
+                let now = Instant::now();
+                let should_sample = match self.last_wpm_sample {
+                    None => true,
+                    Some(last) => now.duration_since(last).as_secs_f64() >= 1.0,
+                };
+
+                if should_sample {
+                    let elapsed = now.duration_since(start).as_secs_f64();
+                    let current_wpm = self.calculate_wpm();
+                    self.wpm_history.push((elapsed, current_wpm));
+                    self.last_wpm_sample = Some(now);
+                }
+            }
+
             if let TestMode::Time(duration) = self.test_mode {
                 if let Some(start) = self.start_time {
                     if start.elapsed().as_secs() >= duration {
                         self.end_time = Some(Instant::now());
+                        // Capture final sample
+                        let elapsed = start.elapsed().as_secs_f64();
+                        let current_wpm = self.calculate_wpm();
+                        self.wpm_history.push((elapsed, current_wpm));
+                        
                         self.mode = AppMode::Results;
                     }
                 }
@@ -96,6 +124,9 @@ impl App {
         self.cursor_position = 0;
         self.total_correct_strokes = 0;
         self.total_incorrect_strokes = 0;
+        self.wpm_history = Vec::new();
+        self.error_points = Vec::new();
+        self.last_wpm_sample = None;
     }
 
     pub fn handle_events(&mut self) -> AppResult<()> {
@@ -131,10 +162,21 @@ impl App {
                             self.total_correct_strokes += 1;
                         } else {
                             self.total_incorrect_strokes += 1;
+                            // Record error point
+                            if let Some(start) = self.start_time {
+                                let elapsed = start.elapsed().as_secs_f64();
+                                let current_wpm = self.calculate_wpm();
+                                self.error_points.push((elapsed, current_wpm));
+                            }
                         }
                     } else {
                          // Typing beyond end of string counts as incorrect
                          self.total_incorrect_strokes += 1;
+                         if let Some(start) = self.start_time {
+                            let elapsed = start.elapsed().as_secs_f64();
+                            let current_wpm = self.calculate_wpm();
+                            self.error_points.push((elapsed, current_wpm));
+                        }
                     }
 
                     self.input.push(c);
@@ -163,6 +205,12 @@ impl App {
             TestMode::Words(_) => {
                 if self.input.len() >= self.target_text.len() {
                     self.end_time = Some(Instant::now());
+                    // Capture final sample
+                    if let Some(start) = self.start_time {
+                        let elapsed = start.elapsed().as_secs_f64();
+                        let current_wpm = self.calculate_wpm();
+                        self.wpm_history.push((elapsed, current_wpm));
+                    }
                     self.mode = AppMode::Results;
                 }
             }
@@ -170,9 +218,13 @@ impl App {
                 // In time mode, we don't end on completion, we might need to append more words if they type fast
                 // For now, let's just assume 100 words is enough or end if they finish (unlikely for 100 words in short time)
                 if self.input.len() >= self.target_text.len() {
-                     // Refill or end? Let's end for simplicity for now, or maybe generate more.
-                     // Let's just end to avoid complexity of dynamic appending for this iteration.
                      self.end_time = Some(Instant::now());
+                     // Capture final sample
+                     if let Some(start) = self.start_time {
+                        let elapsed = start.elapsed().as_secs_f64();
+                        let current_wpm = self.calculate_wpm();
+                        self.wpm_history.push((elapsed, current_wpm));
+                     }
                      self.mode = AppMode::Results;
                 }
             }
