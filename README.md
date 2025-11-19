@@ -2,12 +2,24 @@
 
 TypeStorm is a lightning-fast, terminal-based typing speed checker written in Rust. It brings the aesthetics and functionality of modern web-based typing tests directly to your CLI.
 
-## 🚀 Quick Start
+## 📦 Installation
 
-Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed.
+TypeStorm is available on [crates.io](https://crates.io/crates/typestorm). Install it easily with cargo:
 
 ```bash
-# Run the application directly
+cargo install typestorm
+```
+
+## 🚀 Quick Start
+
+Once installed, simply run:
+
+```bash
+typestorm
+```
+
+Or run directly from source:
+```bash
 cargo run
 ```
 
