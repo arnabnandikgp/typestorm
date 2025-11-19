@@ -47,6 +47,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
+        app.tick(); // Update time-based logic
         app.handle_events()?;
 
         if !app.running {

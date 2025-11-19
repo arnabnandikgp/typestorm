@@ -75,6 +75,21 @@ fn render_main(f: &mut Frame, app: &App, area: Rect) {
                 Line::from("Test your typing speed in the terminal."),
                 Line::from(""),
                 Line::from(Span::styled("Ready?", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+                Line::from(""),
+                Line::from(vec![
+                    Span::raw("Mode: "),
+                    Span::styled(format!("{}", app.test_mode), Style::default().fg(Color::Yellow)),
+                    Span::raw(" | "),
+                    Span::raw("Punctuation: "),
+                    Span::styled(if app.include_punctuation { "ON" } else { "OFF" }, 
+                        if app.include_punctuation { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
+                    Span::raw(" | "),
+                    Span::raw("Numbers: "),
+                    Span::styled(if app.include_numbers { "ON" } else { "OFF" }, 
+                        if app.include_numbers { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) }),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled("[w]ords [t]ime [p]unctuation [n]umbers", Style::default().fg(Color::DarkGray))),
             ];
             let p = Paragraph::new(welcome_text)
                 .alignment(Alignment::Center)
@@ -84,9 +99,9 @@ fn render_main(f: &mut Frame, app: &App, area: Rect) {
             let v_center = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Percentage(40),
+                    Constraint::Percentage(30),
                     Constraint::Length(10),
-                    Constraint::Percentage(40),
+                    Constraint::Percentage(60),
                 ])
                 .split(inner_area);
             

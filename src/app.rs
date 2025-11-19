@@ -12,6 +12,21 @@ pub enum AppMode {
     Results,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestMode {
+    Words(usize),
+    Time(u64), // Duration in seconds
+}
+
+impl std::fmt::Display for TestMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TestMode::Words(n) => write!(f, "Words: {}", n),
+            TestMode::Time(s) => write!(f, "Time: {}s", s),
+        }
+    }
+}
+
 pub struct App {
     pub running: bool,
     pub mode: AppMode,
@@ -19,8 +34,11 @@ pub struct App {
     pub target_text: String,
     pub start_time: Option<Instant>,
     pub end_time: Option<Instant>,
-    pub word_count: usize,
     pub cursor_position: usize,
+    // Settings
+    pub test_mode: TestMode,
+    pub include_punctuation: bool,
+    pub include_numbers: bool,
 }
 
 impl Default for App {
@@ -32,8 +50,10 @@ impl Default for App {
             target_text: String::new(),
             start_time: None,
             end_time: None,
-            word_count: 10, // Default to 10 words
             cursor_position: 0,
+            test_mode: TestMode::Words(10),
+            include_punctuation: false,
+            include_numbers: false,
         }
     }
 }
@@ -43,8 +63,26 @@ impl App {
         Self::default()
     }
 
+    pub fn tick(&mut self) {
+        if self.mode == AppMode::Typing {
+            if let TestMode::Time(duration) = self.test_mode {
+                if let Some(start) = self.start_time {
+                    if start.elapsed().as_secs() >= duration {
+                        self.end_time = Some(Instant::now());
+                        self.mode = AppMode::Results;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn start_typing(&mut self) {
-        let words = words::get_random_words(self.word_count);
+        let count = match self.test_mode {
+            TestMode::Words(n) => n,
+            TestMode::Time(_) => 100, // Generate enough words for time mode, can refill if needed
+        };
+        
+        let words = words::get_random_words(count, self.include_punctuation, self.include_numbers);
         self.target_text = words.join(" ");
         self.input = String::new();
         self.mode = AppMode::Typing;
@@ -67,6 +105,10 @@ impl App {
             AppMode::Welcome => match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => self.running = false,
                 KeyCode::Enter => self.start_typing(),
+                KeyCode::Char('w') => self.cycle_word_mode(),
+                KeyCode::Char('t') => self.cycle_time_mode(),
+                KeyCode::Char('p') => self.include_punctuation = !self.include_punctuation,
+                KeyCode::Char('n') => self.include_numbers = !self.include_numbers,
                 _ => {}
             },
             AppMode::Typing => match key.code {
@@ -97,10 +139,41 @@ impl App {
     }
 
     fn check_completion(&mut self) {
-        if self.input.len() >= self.target_text.len() {
-            self.end_time = Some(Instant::now());
-            self.mode = AppMode::Results;
+        match self.test_mode {
+            TestMode::Words(_) => {
+                if self.input.len() >= self.target_text.len() {
+                    self.end_time = Some(Instant::now());
+                    self.mode = AppMode::Results;
+                }
+            }
+            TestMode::Time(_) => {
+                // In time mode, we don't end on completion, we might need to append more words if they type fast
+                // For now, let's just assume 100 words is enough or end if they finish (unlikely for 100 words in short time)
+                if self.input.len() >= self.target_text.len() {
+                     // Refill or end? Let's end for simplicity for now, or maybe generate more.
+                     // Let's just end to avoid complexity of dynamic appending for this iteration.
+                     self.end_time = Some(Instant::now());
+                     self.mode = AppMode::Results;
+                }
+            }
         }
+    }
+
+    fn cycle_word_mode(&mut self) {
+        self.test_mode = match self.test_mode {
+            TestMode::Words(10) => TestMode::Words(25),
+            TestMode::Words(25) => TestMode::Words(50),
+            TestMode::Words(50) => TestMode::Words(100),
+            _ => TestMode::Words(10),
+        };
+    }
+
+    fn cycle_time_mode(&mut self) {
+        self.test_mode = match self.test_mode {
+            TestMode::Time(15) => TestMode::Time(30),
+            TestMode::Time(30) => TestMode::Time(60),
+            _ => TestMode::Time(15),
+        };
     }
     
     pub fn calculate_wpm(&self) -> f64 {
