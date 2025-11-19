@@ -39,6 +39,9 @@ pub struct App {
     pub test_mode: TestMode,
     pub include_punctuation: bool,
     pub include_numbers: bool,
+    // Stats
+    pub total_correct_strokes: usize,
+    pub total_incorrect_strokes: usize,
 }
 
 impl Default for App {
@@ -54,6 +57,8 @@ impl Default for App {
             test_mode: TestMode::Words(10),
             include_punctuation: false,
             include_numbers: false,
+            total_correct_strokes: 0,
+            total_incorrect_strokes: 0,
         }
     }
 }
@@ -89,6 +94,8 @@ impl App {
         self.start_time = Some(Instant::now());
         self.end_time = None;
         self.cursor_position = 0;
+        self.total_correct_strokes = 0;
+        self.total_incorrect_strokes = 0;
     }
 
     pub fn handle_events(&mut self) -> AppResult<()> {
@@ -117,6 +124,19 @@ impl App {
                     self.start_time = None;
                 }
                 KeyCode::Char(c) => {
+                    // Check if correct BEFORE updating input
+                    let target_char = self.target_text.chars().nth(self.cursor_position);
+                    if let Some(tc) = target_char {
+                        if c == tc {
+                            self.total_correct_strokes += 1;
+                        } else {
+                            self.total_incorrect_strokes += 1;
+                        }
+                    } else {
+                         // Typing beyond end of string counts as incorrect
+                         self.total_incorrect_strokes += 1;
+                    }
+
                     self.input.push(c);
                     self.cursor_position += 1;
                     self.check_completion();
@@ -195,16 +215,11 @@ impl App {
     }
 
     pub fn calculate_accuracy(&self) -> f64 {
-        if self.input.is_empty() {
+        let total_strokes = self.total_correct_strokes + self.total_incorrect_strokes;
+        if total_strokes == 0 {
             return 100.0;
         }
-
-        let correct_chars = self.input.chars()
-            .zip(self.target_text.chars())
-            .filter(|(a, b)| a == b)
-            .count();
-
-        (correct_chars as f64 / self.input.len() as f64) * 100.0
+        (self.total_correct_strokes as f64 / total_strokes as f64) * 100.0
     }
 }
 
@@ -215,39 +230,62 @@ mod tests {
     #[test]
     fn test_calculate_accuracy_perfect() {
         let mut app = App::new();
+        app.mode = AppMode::Typing; // Enable typing mode
         app.target_text = "hello world".to_string();
-        app.input = "hello world".to_string();
+        // Simulate typing correctly
+        for c in "hello world".chars() {
+            app.handle_key_event(KeyEvent::from(KeyCode::Char(c)));
+        }
         assert_eq!(app.calculate_accuracy(), 100.0);
     }
 
     #[test]
     fn test_calculate_accuracy_partial() {
         let mut app = App::new();
-        app.target_text = "hello world".to_string();
-        app.input = "hello worlr".to_string(); // 'l' vs 'r' mismatch at index 10
-        // 10 correct out of 11 total input
-        let expected = (10.0 / 11.0) * 100.0;
-        assert_eq!(app.calculate_accuracy(), expected);
+        app.mode = AppMode::Typing; // Enable typing mode
+        app.target_text = "hello".to_string();
+        
+        // Type 'h', 'e', 'x' (wrong), 'l', 'l', 'o'
+        // Correct: h, e, l, l, o (5)
+        // Incorrect: x (1)
+        // Total: 6
+        // Accuracy: 5/6 * 100 = 83.33%
+        
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('h')));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('x'))); // Wrong
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace)); // Correct it
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('l')));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('o')));
+
+        let expected = (5.0 / 6.0) * 100.0;
+        assert!((app.calculate_accuracy() - expected).abs() < 0.001);
     }
 
     #[test]
     fn test_calculate_accuracy_empty() {
         let mut app = App::new();
+        app.mode = AppMode::Typing;
         app.target_text = "hello".to_string();
-        app.input = "".to_string();
         assert_eq!(app.calculate_accuracy(), 100.0);
     }
 
     #[test]
     fn test_calculate_wpm() {
         let mut app = App::new();
+        app.mode = AppMode::Typing; // Enable typing mode
         app.target_text = "hello world".to_string();
-        app.input = "hello world".to_string(); // 11 chars = 2.2 words
+        // Simulate typing
+        for c in "hello world".chars() {
+             app.handle_key_event(KeyEvent::from(KeyCode::Char(c)));
+        }
         
         let now = Instant::now();
         app.start_time = Some(now - Duration::from_secs(60)); // 1 minute ago
         app.end_time = Some(now);
 
+        // 11 chars = 2.2 words
         // 2.2 words / 1 minute = 2.2 WPM
         assert!((app.calculate_wpm() - 2.2).abs() < 0.001);
     }

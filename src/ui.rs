@@ -1,4 +1,4 @@
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, TestMode};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -32,9 +32,21 @@ fn render_header(f: &mut Frame, _app: &App, area: Rect) {
 
 fn render_footer(f: &mut Frame, app: &App, area: Rect) {
     let info_text = match app.mode {
-        AppMode::Welcome => "Press <Enter> to start | <q> to quit",
-        AppMode::Typing => "Press <Esc> to cancel",
-        AppMode::Results => "Press <Enter/r> to restart | <q> to quit",
+        AppMode::Welcome => "Press <Enter> to start | <q> to quit".to_string(),
+        AppMode::Typing => {
+            if let TestMode::Time(duration) = app.test_mode {
+                if let Some(start) = app.start_time {
+                    let elapsed = start.elapsed().as_secs();
+                    let remaining = duration.saturating_sub(elapsed);
+                    format!("Time Remaining: {}s | Press <Esc> to cancel", remaining)
+                } else {
+                    "Press <Esc> to cancel".to_string()
+                }
+            } else {
+                "Press <Esc> to cancel".to_string()
+            }
+        },
+        AppMode::Results => "Press <Enter/r> to restart | <q> to quit".to_string(),
     };
 
     let stats = if app.mode == AppMode::Typing {
