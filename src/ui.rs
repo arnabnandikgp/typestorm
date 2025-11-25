@@ -40,7 +40,8 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect) {
                     let remaining = duration.saturating_sub(elapsed);
                     format!("Time Remaining: {}s | Press <Esc> to cancel", remaining)
                 } else {
-                    "Press <Esc> to cancel".to_string()
+                    // Timer hasn't started yet - show full duration
+                    format!("Time Remaining: {}s | Press <Esc> to cancel", duration)
                 }
             } else {
                 "Press <Esc> to cancel".to_string()

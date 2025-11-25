@@ -80,16 +80,20 @@ impl App {
             // Sample WPM every 1 second
             if let Some(start) = self.start_time {
                 let now = Instant::now();
-                let should_sample = match self.last_wpm_sample {
-                    None => true,
-                    Some(last) => now.duration_since(last).as_secs_f64() >= 1.0,
-                };
+                let elapsed = now.duration_since(start).as_secs_f64();
+                
+                // Only start sampling after at least 1 second has passed to avoid inflated initial WPM
+                if elapsed >= 1.0 {
+                    let should_sample = match self.last_wpm_sample {
+                        None => true,
+                        Some(last) => now.duration_since(last).as_secs_f64() >= 1.0,
+                    };
 
-                if should_sample {
-                    let elapsed = now.duration_since(start).as_secs_f64();
-                    let current_wpm = self.calculate_wpm();
-                    self.wpm_history.push((elapsed, current_wpm));
-                    self.last_wpm_sample = Some(now);
+                    if should_sample {
+                        let current_wpm = self.calculate_wpm();
+                        self.wpm_history.push((elapsed, current_wpm));
+                        self.last_wpm_sample = Some(now);
+                    }
                 }
             }
 
@@ -97,10 +101,12 @@ impl App {
                 if let Some(start) = self.start_time {
                     if start.elapsed().as_secs() >= duration {
                         self.end_time = Some(Instant::now());
-                        // Capture final sample
+                        // Capture final sample (only if at least 1 second has passed)
                         let elapsed = start.elapsed().as_secs_f64();
-                        let current_wpm = self.calculate_wpm();
-                        self.wpm_history.push((elapsed, current_wpm));
+                        if elapsed >= 1.0 {
+                            let current_wpm = self.calculate_wpm();
+                            self.wpm_history.push((elapsed, current_wpm));
+                        }
                         
                         self.mode = AppMode::Results;
                     }
@@ -119,7 +125,7 @@ impl App {
         self.target_text = words.join(" ");
         self.input = String::new();
         self.mode = AppMode::Typing;
-        self.start_time = Some(Instant::now());
+        self.start_time = None; // Don't start timer yet - wait for first keystroke
         self.end_time = None;
         self.cursor_position = 0;
         self.total_correct_strokes = 0;
@@ -155,6 +161,11 @@ impl App {
                     self.start_time = None;
                 }
                 KeyCode::Char(c) => {
+                    // Start timer on first keystroke
+                    if self.start_time.is_none() {
+                        self.start_time = Some(Instant::now());
+                    }
+                    
                     // Check if correct BEFORE updating input
                     let target_char = self.target_text.chars().nth(self.cursor_position);
                     if let Some(tc) = target_char {
@@ -205,11 +216,13 @@ impl App {
             TestMode::Words(_) => {
                 if self.input.len() >= self.target_text.len() {
                     self.end_time = Some(Instant::now());
-                    // Capture final sample
+                    // Capture final sample (only if at least 1 second has passed)
                     if let Some(start) = self.start_time {
                         let elapsed = start.elapsed().as_secs_f64();
-                        let current_wpm = self.calculate_wpm();
-                        self.wpm_history.push((elapsed, current_wpm));
+                        if elapsed >= 1.0 {
+                            let current_wpm = self.calculate_wpm();
+                            self.wpm_history.push((elapsed, current_wpm));
+                        }
                     }
                     self.mode = AppMode::Results;
                 }
@@ -219,11 +232,13 @@ impl App {
                 // For now, let's just assume 100 words is enough or end if they finish (unlikely for 100 words in short time)
                 if self.input.len() >= self.target_text.len() {
                      self.end_time = Some(Instant::now());
-                     // Capture final sample
+                     // Capture final sample (only if at least 1 second has passed)
                      if let Some(start) = self.start_time {
                         let elapsed = start.elapsed().as_secs_f64();
-                        let current_wpm = self.calculate_wpm();
-                        self.wpm_history.push((elapsed, current_wpm));
+                        if elapsed >= 1.0 {
+                            let current_wpm = self.calculate_wpm();
+                            self.wpm_history.push((elapsed, current_wpm));
+                        }
                      }
                      self.mode = AppMode::Results;
                 }
