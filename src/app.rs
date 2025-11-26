@@ -196,8 +196,14 @@ impl App {
                 }
                 KeyCode::Backspace => {
                     if !self.input.is_empty() {
-                        self.input.pop();
-                        self.cursor_position -= 1;
+                        // Don't allow backspace if the last character is a space
+                        // This prevents editing previous words (similar to Monkeytype behavior)
+                        if let Some(last_char) = self.input.chars().last() {
+                            if last_char != ' ' {
+                                self.input.pop();
+                                self.cursor_position -= 1;
+                            }
+                        }
                     }
                 }
                 _ => {}
