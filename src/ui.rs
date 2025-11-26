@@ -234,9 +234,12 @@ fn render_main(f: &mut Frame, app: &App, area: Rect) {
 
             let wpm_data = interpolate_data(&raw_wpm_data, 20); // 20 points between each sample for smoother curve
             
+            // Calculate time bounds from actual data
+            let min_time = raw_wpm_data.first().map(|(t, _)| *t).unwrap_or(0.0);
+            let max_time = raw_wpm_data.last().map(|(t, _)| *t).unwrap_or(60.0).max(1.0);
+            
             // Process Error Data: Bin by 1.5s
             let bin_size = 1.5;
-            let max_time = raw_wpm_data.last().map(|(t, _)| *t).unwrap_or(60.0).max(1.0);
             let num_bins = (max_time / bin_size).ceil() as usize + 1;
             let mut error_bins = vec![0; num_bins];
 
@@ -294,9 +297,9 @@ fn render_main(f: &mut Frame, app: &App, area: Rect) {
                     Axis::default()
                         .title("Time (s)")
                         .style(Style::default().fg(Color::Gray))
-                        .bounds([0.0, max_time])
+                        .bounds([min_time, max_time])
                         .labels(vec![
-                            Span::styled("0", Style::default().add_modifier(Modifier::BOLD)),
+                            Span::styled(format!("{:.0}", min_time), Style::default().add_modifier(Modifier::BOLD)),
                             Span::styled(format!("{:.0}", max_time), Style::default().add_modifier(Modifier::BOLD)),
                         ]),
                 )
