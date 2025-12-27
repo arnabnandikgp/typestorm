@@ -10,6 +10,7 @@ use std::io;
 mod app;
 mod ui;
 mod words;
+mod history;
 
 use app::App;
 

@@ -1,5 +1,7 @@
-use crate::words;
+use crate::{words, history::{self, TestResult}};
 use anyhow::Result;
+use chrono::Local;
+use ratatui::widgets::TableState;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use std::time::{Duration, Instant};
 
@@ -10,6 +12,8 @@ pub enum AppMode {
     Welcome,
     Typing,
     Results,
+    History,
+    HistoryDetails,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +50,10 @@ pub struct App {
     pub wpm_history: Vec<(f64, f64)>, // (time, wpm)
     pub error_points: Vec<(f64, f64)>, // (time, wpm_at_error)
     pub last_wpm_sample: Option<Instant>,
+    // History
+    pub history: Vec<TestResult>,
+    pub history_state: TableState,
+    pub selected_history_index: usize,
 }
 
 impl Default for App {
@@ -66,13 +74,21 @@ impl Default for App {
             wpm_history: Vec::new(),
             error_points: Vec::new(),
             last_wpm_sample: None,
+            history: Vec::new(),
+            history_state: TableState::default(),
+            selected_history_index: 0,
         }
     }
 }
 
 impl App {
     pub fn new() -> Self {
-        Self::default()
+        let mut app = Self::default();
+        // Load history
+        if let Ok(history) = history::load_history() {
+            app.history = history;
+        }
+        app
     }
 
     pub fn tick(&mut self) {
@@ -108,6 +124,7 @@ impl App {
                             self.wpm_history.push((elapsed, current_wpm));
                         }
                         
+                        self.save_result();
                         self.mode = AppMode::Results;
                     }
                 }
@@ -153,6 +170,57 @@ impl App {
                 KeyCode::Char('t') => self.cycle_time_mode(),
                 KeyCode::Char('p') => self.include_punctuation = !self.include_punctuation,
                 KeyCode::Char('n') => self.include_numbers = !self.include_numbers,
+                KeyCode::Char('h') => {
+                    self.mode = AppMode::History;
+                    self.history_state.select(Some(0));
+                    self.selected_history_index = 0;
+                }
+                _ => {}
+            },
+            AppMode::History => match key.code {
+                KeyCode::Esc => self.mode = AppMode::Welcome,
+                KeyCode::Char('q') => self.mode = AppMode::Welcome,
+                KeyCode::Up | KeyCode::Char('k') => {
+                     if !self.history.is_empty() {
+                        let i = match self.history_state.selected() {
+                            Some(i) => {
+                                if i == 0 {
+                                    self.history.len() - 1
+                                } else {
+                                    i - 1
+                                }
+                            }
+                            None => 0,
+                        };
+                        self.history_state.select(Some(i));
+                        self.selected_history_index = i;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if !self.history.is_empty() {
+                        let i = match self.history_state.selected() {
+                            Some(i) => {
+                                if i >= self.history.len() - 1 {
+                                    0
+                                } else {
+                                    i + 1
+                                }
+                            }
+                            None => 0,
+                        };
+                        self.history_state.select(Some(i));
+                        self.selected_history_index = i;
+                    }
+                }
+                KeyCode::Enter => {
+                    if !self.history.is_empty() {
+                        self.mode = AppMode::HistoryDetails;
+                    }
+                }
+                _ => {}
+            },
+            AppMode::HistoryDetails => match key.code {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Backspace => self.mode = AppMode::History,
                 _ => {}
             },
             AppMode::Typing => match key.code {
@@ -230,6 +298,7 @@ impl App {
                             self.wpm_history.push((elapsed, current_wpm));
                         }
                     }
+                    self.save_result();
                     self.mode = AppMode::Results;
                 }
             }
@@ -246,10 +315,24 @@ impl App {
                             self.wpm_history.push((elapsed, current_wpm));
                         }
                      }
+                     self.save_result();
                      self.mode = AppMode::Results;
                 }
             }
         }
+    }
+
+    fn save_result(&mut self) {
+        let result = TestResult {
+            timestamp: Local::now(),
+            mode: format!("{}", self.test_mode),
+            wpm: self.calculate_wpm(),
+            accuracy: self.calculate_accuracy(),
+            wpm_history: self.wpm_history.clone(),
+            error_points: self.error_points.clone(),
+        };
+        self.history.push(result);
+        let _ = history::save_history(&self.history);
     }
 
     fn cycle_word_mode(&mut self) {
