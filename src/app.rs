@@ -264,14 +264,8 @@ impl App {
                 }
                 KeyCode::Backspace => {
                     if !self.input.is_empty() {
-                        // Don't allow backspace if the last character is a space
-                        // This prevents editing previous words (similar to Monkeytype behavior)
-                        if let Some(last_char) = self.input.chars().last() {
-                            if last_char != ' ' {
-                                self.input.pop();
-                                self.cursor_position -= 1;
-                            }
-                        }
+                        self.input.pop();
+                        self.cursor_position -= 1;
                     }
                 }
                 _ => {}
@@ -444,5 +438,67 @@ mod tests {
         // 11 chars = 2.2 words
         // 2.2 words / 1 minute = 2.2 WPM
         assert!((app.calculate_wpm() - 2.2).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_multi_word_deletion() {
+        let mut app = App::new();
+        app.mode = AppMode::Typing;
+        app.target_text = "hello world".to_string();
+        
+        // Type "hello "
+        for c in "hello ".chars() {
+            app.handle_key_event(KeyEvent::from(KeyCode::Char(c)));
+        }
+        assert_eq!(app.input, "hello ");
+        assert_eq!(app.cursor_position, 6);
+        
+        // Try to backspace across the space
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        assert_eq!(app.input, "hello");
+        assert_eq!(app.cursor_position, 5);
+        
+        // Backspace more
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        assert_eq!(app.input, "hell");
+        assert_eq!(app.cursor_position, 4);
+    }
+
+    #[test]
+    fn test_accuracy_with_deletions() {
+        let mut app = App::new();
+        app.mode = AppMode::Typing;
+        app.target_text = "hello".to_string();
+        
+        // Scenario 1: Mistake and correction
+        // Type 'x' instead of 'h'
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('x'))); 
+        assert_eq!(app.total_incorrect_strokes, 1);
+        assert_eq!(app.total_correct_strokes, 0);
+        
+        // Backspace and type 'h'
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('h')));
+        assert_eq!(app.total_incorrect_strokes, 1);
+        assert_eq!(app.total_correct_strokes, 1);
+        
+        // Accuracy should be 50% (1 correct / 2 total keystrokes)
+        assert_eq!(app.calculate_accuracy(), 50.0);
+        
+        // Scenario 2: Deleting a correct character and re-typing it
+        // Type 'e'
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
+        assert_eq!(app.total_correct_strokes, 2);
+        
+        // Backspace 'e' and type 'e' again
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        app.handle_key_event(KeyEvent::from(KeyCode::Char('e')));
+        
+        // Currently, this INCREMENTS total_correct_strokes again
+        assert_eq!(app.total_correct_strokes, 3);
+        
+        // Total strokes = 1 (x) + 1 (h) + 1 (e) + 1 (e) = 4
+        // Accuracy = 3 / 4 = 75%
+        assert_eq!(app.calculate_accuracy(), 75.0);
     }
 }
