@@ -264,26 +264,11 @@ impl App {
                 }
                 KeyCode::Backspace => {
                     if !self.input.is_empty() {
-                        // Monkeytype-style: allow deletion of previous word only if it was incorrect
+                        // Allow backspacing across a space only if there's an error somewhere in the typed text
                         if let Some(last_char) = self.input.chars().last() {
                             if last_char == ' ' {
-                                // Find the start of the word we just finished
-                                let bytes = self.input.as_bytes();
-                                let mut start_idx = 0;
-                                if self.input.len() > 1 {
-                                    for i in (0..self.input.len() - 1).rev() {
-                                        if bytes[i] == b' ' {
-                                            start_idx = i + 1;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                let current_segment = &self.input[start_idx..];
-                                let target_segment = self.target_text.get(start_idx..self.input.len()).unwrap_or("");
-
-                                if current_segment == target_segment {
-                                    // Word is correct, block backspace
+                                if self.target_text.starts_with(&self.input) {
+                                    // Everything is correct so far, block backspace across space
                                     return;
                                 }
                             }
@@ -468,36 +453,38 @@ mod tests {
     fn test_refined_deletion() {
         let mut app = App::new();
         app.mode = AppMode::Typing;
-        app.target_text = "hello world".to_string();
+        app.target_text = "hello world fine".to_string();
         
-        // Case 1: Correct word + space -> Blocked
-        for c in "hello ".chars() {
+        // Case 1: Everything correct -> Blocked at space
+        for c in "hello world ".chars() {
             app.handle_key_event(KeyEvent::from(KeyCode::Char(c)));
         }
         app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(app.input, "hello ", "Should NOT delete space if word is correct");
+        assert_eq!(app.input, "hello world ", "Should block backspace if everything is correct");
         
-        // Case 2: Incorrect word + space -> Allowed
-        app.input = "hellp ".to_string();
-        app.cursor_position = 6;
+        // Case 2: Error in first word -> Allowed to delete across multiple spaces
+        app.input = "hellp world ".to_string();
+        app.cursor_position = 12;
+        
+        // Backspace across first space
         app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(app.input, "hellp", "Should allow deleting space if word is incorrect");
+        assert_eq!(app.input, "hellp world");
         
-        // Case 3: Middle of word -> Allowed
+        // Backspace into "world"
+        for _ in 0..5 {
+            app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        }
+        assert_eq!(app.input, "hellp ");
+        
+        // Backspace across second space (into "hellp")
+        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
+        assert_eq!(app.input, "hellp");
+        
+        // Case 3: Middle of word -> Always allowed
         app.input = "hello".to_string();
         app.cursor_position = 5;
         app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(app.input, "hell", "Should allow deleting within word");
-
-        // Case 4: Correct word after fixing it -> Blocked again
-        app.input = "hell".to_string();
-        app.cursor_position = 4;
-        for c in "o ".chars() {
-            app.handle_key_event(KeyEvent::from(KeyCode::Char(c)));
-        }
-        assert_eq!(app.input, "hello ");
-        app.handle_key_event(KeyEvent::from(KeyCode::Backspace));
-        assert_eq!(app.input, "hello ", "Should block again once word is corrected");
+        assert_eq!(app.input, "hell");
     }
 
     #[test]
